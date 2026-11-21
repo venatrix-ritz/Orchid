@@ -369,19 +369,54 @@ TEST_CASE("Ampere unsigned wide IMAD reports full-sum carry after aliased guarde
                             REQUIRE(lowered);
                             const auto before = machine;
                             const bool active = ((guard & 7) == 7 || before.predicates[guard & 7]) != bool(guard & 8);
-                            const unsigned __int128 sum =
-                                static_cast<unsigned __int128>(values[0]) * values[1] +
-                                values[2] + (static_cast<unsigned __int128>(values[3]) << 32);
-                            const u64 expected = active ? static_cast<u64>(sum) :
+                            // 128-bit sum without __int128 (MSVC): low 64 bits and the carry out.
+                            const u64 product = u64{values[0]} * values[1];
+                            const u64 partial = product + values[2];
+                            const u64 sum = partial + (u64{values[3]} << 32);
+                            const bool carry = partial < product || sum < partial;
+                            const u64 expected = active ? sum :
                                 before.Read(dest) | (u64{before.Read(dest + 1)} << 32);
                             auto expected_state = before;
-                            if (active) expected_state.predicates[carry_output] = (sum >> 64) != 0;
+                            if (active) expected_state.predicates[carry_output] = carry;
                             machine.Run(lowered.instructions);
                             REQUIRE((machine.Read(dest) | (u64{machine.Read(dest + 1)} << 32)) == expected);
                             CheckUnchanged(expected_state, machine, dest, 2);
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+TEST_CASE("Ampere IADD3.X adds two carry-in predicates when executed",
+          "[video_core][ampere][integer_multiply]") {
+    std::mt19937 random{0x1add3};
+    for (const u32 negate_second : {0U, 1U}) {
+        for (u32 state = 0; state < 4; ++state) {
+            for (u32 round = 0; round < 16; ++round) {
+                auto machine = SeedMachine();
+                machine.predicates[0] = (state & 1) != 0;
+                machine.predicates[1] = (state & 2) != 0;
+                const std::array<u32, 3> values{static_cast<u32>(random()), static_cast<u32>(random()),
+                                                round == 0 ? 0xffffffffU : static_cast<u32>(random())};
+                machine.registers[2] = values[0];
+                machine.registers[4] = values[1];
+                machine.registers[6] = values[2];
+                // IADD3.X R8, R2, R4, R6, P0, [!]P1: no carry outputs (bits 81-86 = PT).
+                const Instruction instruction{{0x210U | (7U << 12) | (8U << 16) | (2U << 24), 4U,
+                                               6U | (1U << 10) | (1U << 13) | (negate_second << 16) |
+                                                   (7U << 17) | (7U << 20),
+                                               0}};
+                const auto lowered = LowerToMaxwell(std::array{instruction, Exit});
+                INFO(lowered.error);
+                REQUIRE(lowered);
+                const auto before = machine;
+                machine.Run(lowered.instructions);
+                const u32 expected = values[0] + values[1] + values[2] + u32{before.predicates[0]} +
+                                     u32{before.predicates[1] != (negate_second != 0)};
+                REQUIRE(machine.Read(8) == expected);
+                CheckUnchanged(before, machine, 8, 1);
             }
         }
     }
