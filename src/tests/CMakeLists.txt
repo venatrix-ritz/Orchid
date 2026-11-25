@@ -326,6 +326,7 @@ set(listed_test_sources audio_core/cubeb_recovery.cpp audio_core/sdl_recovery.cp
     common/host_memory_commit.cpp # added above on Windows only
     input_common/gc_adapter_libusb.cpp # added above with libusb on Linux only
     input_common/silent_controller.cpp # added above on Linux only
+    frontend_common/config_persistence.cpp # added above on Linux only
     qt_common/qt_config_ban_list.cpp
     qt_common/game_list_patch_cache.cpp) # added above with the Qt frontend only
 foreach(test_target IN ITEMS tests stall_diagnostics_session debug_stream_contract)

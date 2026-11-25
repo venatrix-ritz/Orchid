@@ -158,7 +158,7 @@ TEST_CASE("Hyrule Warriors frame step is found only in the checked build", "[gam
     std::array<u8, 0x20> build_id{};
     std::copy(FileSys::HyruleFrameStepBuildId.begin(), FileSys::HyruleFrameStepBuildId.end(),
               build_id.begin());
-    REQUIRE(FileSys::FindHyruleFrameStep(image, build_id) == 0x28966a8);
+    REQUIRE(FileSys::FindHyruleFrameStep(image, build_id) == 0x28966a8U);
 
     SECTION("another build") {
         auto other = build_id;
